@@ -85,3 +85,25 @@ restart never touches GitHub.
 ## License
 
 Apache 2.0. See `LICENSE`.
+
+
+## Observed weakness in V1: what failed and why
+
+V3 and v6 were a problem for V1. it resized and compressed 3/10 and crop and resize 5/10. Rule 3 did not fire any v3 or v6 image.
+Original_01__resize_scale75__compress__q30__v3.jpg
+Original_00__resize_scale114__compress__q45__v3.jpg
+Original_03__crop_keep60__resized__q60__v6.jpg
+original_09__crop_keep50__resized__q75__v6.jpg 
+
+
+## Design decision for V2: what Rule 4 is and why you chose it
+convert the images to grayscale and compute canny edges. search multiple template sizes. record the highest normalized edge match score. reweights the original rules to 25/25/40, leaving 10 points for rules 4.
+## Effect of the change: accuracy before/after on easy vs hard
+easy accuracy went up from 51.7% in v1 to 96.7% in v2.
+hard accuracy decreased from 75% to 48.3%.
+v2 did better on easy images but worse on hard images. it still failed to match the hard resize and crop plus resize images. Not all improvements came from Rule 4.
+## Trade-offs: what new costs or risks did Rule 4 introduce
+Rule 4 checks 27 sizes for each image pair so that adds more work.
+Giving points to rule 4 meant reducing the points available to rules 1 and 2. some images that passed v1 then failed v2. 
+Rule 4 sometimes gave misleading evidence. It gave 10 points to an image even though that image was unrelated. 'randoM_10.JPEG'. The system was rejected because the total score is 32. 
+There is times Rule 4 helped but not enough. It gave 10 point to `original_09__crop_keep50__resized__q75__v6.jpg` but the total wwas only 46 so the image was rejected.
