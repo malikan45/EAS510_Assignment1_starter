@@ -64,7 +64,9 @@ def _gray(path):
     img = _arr(path)
     if img is None:
         return None
-    return _downscale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))
+    return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+"""    return _downscale(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))"""
+
 
 
 @lru_cache(maxsize=256)
@@ -116,14 +118,13 @@ def rule2_histogram(target, input_path):
         pass
     return out
 
-
-def rule3_template(target, input_path):
     """Template matching. Detects when the suspect is contained in the original.
 
     cv2.matchTemplate needs the template (suspect) smaller than the target
     (original); on rotated/resized suspects this rule degrades fast. Fixing
     that becomes Rule 4 territory.
     """
+def rule3_template(target, input_path):
     out = {"rule": 3, "name": "Template", "fired": False, "score": 0,
            "out_of": 40, "note": "Match score 0.00", "metric": 0.0}
     try:
@@ -131,16 +132,66 @@ def rule3_template(target, input_path):
         nd_g = _gray(input_path)
         if src_g is None or nd_g is None:
             return out
-        if (src_g.shape[0] < nd_g.shape[0]) or (src_g.shape[1] < nd_g.shape[1]):
-            nd_g = cv2.resize(nd_g, (min(nd_g.shape[1], src_g.shape[1]),
-                                     min(nd_g.shape[0], src_g.shape[0])))
-        res = cv2.matchTemplate(src_g, nd_g, cv2.TM_CCOEFF_NORMED)
-        metric = float(res.max())
-        out["metric"] = round(max(0.0, min(1.0, metric)), 3)
+
+        src_h, src_w = src_g.shape
+        nd_h, nd_w = nd_g.shape
+
+        metric = 0.0
+        src_small = _downscale(src_g)
+        scale = src_small.shape[1] / src_w
+
+        if nd_h <= src_h and nd_w <= src_w:
+            crop_small = cv2.resize(
+                nd_g,
+                (max(1, round(nd_w * scale)),
+                 max(1, round(nd_h * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+
+            if (
+                min(crop_small.shape) >= 16
+                and crop_small.shape[0] <= src_small.shape[0]
+                and crop_small.shape[1] <= src_small.shape[1]
+                and float(crop_small.std()) >= 2.0
+                and float(src_small.std()) >= 2.0
+            ):
+                res = cv2.matchTemplate(
+                    src_small, crop_small, cv2.TM_CCOEFF_NORMED
+                )
+                values = res[np.isfinite(res)]
+                if values.size:
+                    metric = max(metric, float(values.max()))
+
+        src_ratio = src_w / src_h
+        nd_ratio = nd_w / nd_h
+        ratio_match = min(src_ratio, nd_ratio) / max(src_ratio, nd_ratio)
+
+        if ratio_match >= 0.98:
+            resized = cv2.resize(
+                nd_g,
+                (src_small.shape[1], src_small.shape[0]),
+                interpolation=cv2.INTER_AREA,
+            )
+
+            if (
+                min(src_small.shape) >= 16
+                and float(resized.std()) >= 2.0
+                and float(src_small.std()) >= 2.0
+            ):
+                res = cv2.matchTemplate(
+                    src_small, resized, cv2.TM_CCOEFF_NORMED
+                )
+                values = res[np.isfinite(res)]
+                if values.size:
+                    metric = max(metric, float(values.max()))
+
+        metric = max(0.0, min(1.0, metric))
+        out["metric"] = round(metric, 3)
         out["note"] = f"Match score {out['metric']:.2f}"
-        if out["metric"] >= 0.4:
+
+        if metric >= 0.80:
             out["fired"] = True
-            out["score"] = int(round(out["out_of"] * out["metric"]))
+            out["score"] = int(round(out["out_of"] * metric))
     except Exception:
         pass
     return out
