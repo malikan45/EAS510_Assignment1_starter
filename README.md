@@ -90,6 +90,7 @@ Apache 2.0. See `LICENSE`.
 ## Observed weakness in V1: what failed and why
 
 V3 and v6 were a problem for V1. it resized and compressed 3/10 and crop and resize 5/10. Rule 3 did not fire any v3 or v6 image.
+some of the images that i noted were the following:
 Original_01__resize_scale75__compress__q30__v3.jpg
 Original_00__resize_scale114__compress__q45__v3.jpg
 Original_03__crop_keep60__resized__q60__v6.jpg
